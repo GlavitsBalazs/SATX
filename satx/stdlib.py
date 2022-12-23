@@ -909,27 +909,28 @@ def satisfy(solver, params='', log=False):
         print('No .cnf extension found. {}'.format(ex))
     if not render:
         render = True
-        csp.cnf_file = open(csp.cnf, 'r+')
-        header = 'p cnf {} {}'.format(csp.number_of_variables, csp.number_of_clauses)
-        content = csp.cnf_file.read()
-        csp.cnf_file.seek(0, 0)
-        csp.cnf_file.write(header.rstrip('\r\n') + '\n' + content)
-        csp.cnf_file.close()
+        if csp.cnf_file is not None:
+            csp.cnf_file.close()
+        with open(csp.cnf, 'r+') as cnf_file:
+            header = 'p cnf {} {}'.format(csp.number_of_variables, csp.number_of_clauses)
+            content = cnf_file.read()
+            cnf_file.seek(0, 0)
+            cnf_file.write(header.rstrip('\r\n') + '\n' + content)
     if '.' not in csp.cnf:
         raise Exception('CNF has no extension.')
     with open('{}.mod'.format(key), 'w', encoding="utf8", errors='ignore') as file:
-        proc = subprocess.Popen('{0} {1}.cnf {2}'.format(solver, key, params), shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        for stdout_line in iter(proc.stdout.readline, ''):
-            if not stdout_line:
-                break
-            try:
-                line = stdout_line.decode()
-                file.write(line)
-                if log:
-                    print(line, end='')
-            except:
-                pass
-        proc.stdout.close()
+        with subprocess.Popen('{0} {1}.cnf {2}'.format(solver, key, params), shell=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
+            for stdout_line in iter(proc.stdout.readline, ''):
+                if not stdout_line:
+                    break
+                try:
+                    line = stdout_line.decode()
+                    file.write(line)
+                    if log:
+                        print(line, end='')
+                except:
+                    pass
     with open('{}.mod'.format(key), 'r') as mod:
         lines = ''
         for line in mod.readlines():
@@ -948,15 +949,16 @@ def satisfy(solver, params='', log=False):
                     else:
                         arg.value = int(ds, 2)
                     del arg.bin[:]
+            if csp.cnf_file is not None:
+                csp.cnf_file.close()
             with open(csp.cnf, 'a') as file:
                 file.write(' '.join([str(-int(literal)) for literal in model]) + '\n')
                 csp.number_of_clauses += 1
-            csp.cnf_file = open(csp.cnf, 'r+')
-            header = 'p cnf {} {}'.format(csp.number_of_variables, csp.number_of_clauses)
-            content = csp.cnf_file.read()
-            csp.cnf_file.seek(0, 0)
-            csp.cnf_file.write(header.rstrip('\r\n') + '\n' + content[content.index('\n'):])
-            csp.cnf_file.close()
+            with open(csp.cnf, 'r+') as cnf_file:
+                header = 'p cnf {} {}'.format(csp.number_of_variables, csp.number_of_clauses)
+                content = cnf_file.read()
+                cnf_file.seek(0, 0)
+                cnf_file.write(header.rstrip('\r\n') + '\n' + content[content.index('\n'):])
             return True
     return False
 
@@ -970,6 +972,8 @@ def reset():
     """
     import os
     if csp is not None:
+        if csp.cnf_file is not None:
+            csp.cnf_file.close()
         if os.path.exists(csp.cnf):
             os.remove(csp.cnf)
     render = False
