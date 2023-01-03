@@ -1,5 +1,6 @@
 """
-Copyright (c) 2012-2021 Oscar Riveros [https://twitter.com/maxtuno].
+Copyright (c) 2012-2023 Oscar Riveros [https://twitter.com/maxtuno].
+Copyright (c) 2023 Balázs Glávits <balazs@glavits.hu>
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -21,60 +22,138 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from .unit import *
+from __future__ import annotations
+
+import numbers
+from abc import abstractmethod, ABCMeta
+from typing import TypeVar, Generic, cast, SupportsInt
+
+from satx.unit import Unit
+
+_TR = TypeVar('_TR', bound=numbers.Real)
+_TC = TypeVar('_TC', bound=numbers.Complex, covariant=True)
 
 
-class Gaussian:
-    def __init__(self, x, y):
-        self.real = x
-        self.imag = y
+class ComplexBase(numbers.Complex, Generic[_TR, _TC], metaclass=ABCMeta):
+    __slots__ = ('_real', '_imag')
 
-    def __eq__(self, other):
-        assert self.real == other.real
-        assert self.imag == other.imag
-        return True
+    def __init__(self, real: _TR, imag: _TR):
+        self._real = real
+        self._imag = imag
 
-    def __ne__(self, other):
-        bit = Unit(self.real.alu, bits=2)
-        assert (self.real - other.real).iff(bit[0], self.imag - other.imag) != 0
-        return True
+    @classmethod
+    def from_re_im(cls, real: _TR, imag: _TR):
+        return cls(real, imag)
 
-    def __neg__(self):
-        return Gaussian(-self.real, -self.imag)
+    @property
+    def real(self) -> _TR:
+        return self._real
 
-    def __add__(self, other):
-        return Gaussian(self.real + other.real, self.imag + other.imag)
+    @property
+    def imag(self) -> _TR:
+        return self._imag
 
-    def __radd__(self, other):
-        return self + other
+    def __add__(self, other: numbers.Complex) -> _TC:
+        return self.from_re_im(self.real + other.real, self.imag + other.imag)
 
-    def __sub__(self, other):
-        return Gaussian(self.real - other.real, self.imag - other.imag)
+    def __radd__(self, other: numbers.Complex) -> _TC:
+        return self.from_re_im(other.real + self.real, other.imag + self.imag)
 
-    def __mul__(self, other):
-        return Gaussian((self.real * other.real) - (self.imag * other.imag), ((self.real * other.imag) + (self.imag * other.real)))
+    def __neg__(self) -> _TC:
+        return self.from_re_im(-self.real, -self.imag)
 
-    def __truediv__(self, other):
-        return Gaussian(
-            ((self.real * other.real) + (self.imag * other.imag)) / (other.real ** 2 + other.imag ** 2), ((self.imag * other.real) - (self.real * other.imag)) / (other.real ** 2 + other.imag ** 2))
+    def __pos__(self) -> _TC:
+        return self.from_re_im(self.real, self.imag)
 
-    def __pow__(self, power, modulo=None):
-        other = self
-        for _ in range(power - 1):
-            other *= self
-        return other
+    def __mul__(self, other: numbers.Complex) -> _TC:
+        return self.from_re_im((self.real * other.real) - (self.imag * other.imag),
+                               ((self.real * other.imag) + (self.imag * other.real)))
 
-    def __abs__(self):
-        return Gaussian(self.real.alu.sqrt(self.real ** 2 + self.imag ** 2), 0)
+    def __rmul__(self, other: numbers.Complex) -> _TC:
+        return self.from_re_im((other.real * self.real) - (other.imag * self.imag),
+                               ((other.real * self.imag) + (other.imag * self.real)))
+
+    def __truediv__(self, other: numbers.Complex) -> _TC:
+        divisor_abs_squared = other.real * other.real + other.imag * other.imag
+        return self.from_re_im(((self.real * other.real) + (self.imag * other.imag)) / divisor_abs_squared,
+                               ((self.imag * other.real) - (self.real * other.imag)) / divisor_abs_squared)
+
+    def __rtruediv__(self, other: numbers.Complex) -> _TC:
+        divisor_abs_squared = self.real * self.real + self.imag * self.imag
+        return self.from_re_im(((other.real * self.real) + (other.imag * self.imag)) / divisor_abs_squared,
+                               ((other.imag * self.real) - (other.real * self.imag)) / divisor_abs_squared)
+
+    def __pow__(self, exponent: numbers.Complex) -> _TC:
+        return self._pow(self, exponent)
+
+    def __rpow__(self, base: numbers.Complex) -> _TC:
+        return self._pow(base, self)
+
+    def _pow(self, base: numbers.Complex, exponent: numbers.Complex) -> _TC:
+        int_exponent: int | None = None
+        try:
+            int_exponent = int(cast(SupportsInt, exponent))
+        except (TypeError, ValueError):
+            pass
+        if int_exponent is not None:
+            res = base
+            for _ in range(int_exponent - 1):
+                res *= base
+            return self.from_re_im(res.real, res.imag)
+        else:
+            return self._complex_pow(base, exponent)
+
+    @abstractmethod
+    def _complex_pow(self, base: numbers.Complex, exponent: numbers.Complex) -> _TC:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _real_sqrt(self, arg: _TR) -> _TR:
+        raise NotImplementedError
+
+    def __abs__(self) -> _TR:
+        return self._real_sqrt((self.real * self.real + self.imag * self.imag).real)
+
+    def conjugate(self) -> _TC:
+        return self.from_re_im(self.real, -self.imag)
+
+    def __complex__(self) -> complex:
+        return complex(float(self.real), float(self.imag))
 
     def __repr__(self):
-        return '({}+{}j)'.format(self.real, self.imag)
+        return f'{self.real}+{self.imag}j'
 
     def __str__(self):
-        return str(self.__repr__())
+        return self.__repr__()
 
-    def __complex__(self):
-        return complex(int(self.real), int(self.imag))
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, numbers.Complex):
+            return False
+        other_complex = cast(numbers.Complex, other)
+        real_eq = self.real == other_complex.real
+        imag_eq = self.imag == other_complex.imag
+        return real_eq and imag_eq  # do both comparisons, to prevent short-circuiting
 
-    def conjugate(self):
-        return Gaussian(self.real, -self.imag)
+    def __ne__(self, other: object) -> bool:
+        if not isinstance(other, numbers.Complex):
+            return True
+        other_complex = cast(numbers.Complex, other)
+        real_ne = self.real != other_complex.real
+        imag_ne = self.imag != other_complex.imag
+        return real_ne or imag_ne  # do both comparisons, to prevent short-circuiting
+
+    def __hash__(self) -> int:
+        return hash((self.real, self.imag))
+
+
+class Gaussian(ComplexBase[Unit, 'Gaussian']):
+    def _complex_pow(self, base: numbers.Complex, exponent: numbers.Complex):
+        raise NotImplementedError("Irrational numbers are not supported.")
+
+    def __pow__(self, exponent: int) -> 'Gaussian':  # type: ignore
+        return cast(Gaussian, super().__pow__(cast(numbers.Complex, exponent)))
+
+    def _real_sqrt(self, arg: Unit) -> Unit:
+        y = arg.alu.integer()
+        assert arg == y * y
+        return y

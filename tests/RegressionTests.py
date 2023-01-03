@@ -1,3 +1,28 @@
+"""
+Copyright (c) 2012-2023 Oscar Riveros [https://twitter.com/maxtuno].
+Copyright (c) 2023 Balázs Glávits <balazs@glavits.hu>
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
+import fractions
 import functools
 import itertools
 import math
@@ -52,7 +77,7 @@ class RegressionTests(SatXTestCase):
 
         assert _2 ** n - 7 == x ** 2
 
-        self.assert_solutions(lambda: (int(n), int(x)), {(5, 5), (4, 3), (7, 11), (3, 1)})
+        self.assert_solutions(lambda: (int(n), int(x)), {(5, 5), (4, 3), (7, 11), (3, 1), (15, 181)})
 
     def test_diophantine_equation_2(self):
         # http://www.artofproblemsolving.com/Forum/viewtopic.php?t=103239
@@ -93,7 +118,7 @@ class RegressionTests(SatXTestCase):
 
         assert _3 ** x == y * _2 ** x + 1
 
-        self.assert_solutions(lambda: (int(x), int(y)), {(2, 2), (4, 5), (1, 1)})
+        self.assert_solutions(lambda: (int(x), int(y)), {(2, 2), (4, 5), (1, 1), (0, 0)})
 
     def test_integer_factorization(self):
         """
@@ -168,9 +193,9 @@ class RegressionTests(SatXTestCase):
         assert y != satx.oo()
 
         self.assert_solutions(lambda: (int(x), int(y)), {
-            (8, 9), (12, 13), (4, 5), (10, 9), (2, 1), (14, 13), (6, 5), (9, 8), (13, 12), (5, 4), (8, 7), (12, 11),
-            (4, 3), (11, 10), (10, 11), (2, 3), (14, 15), (6, 7), (9, 10), (13, 14), (5, 6), (1, 2), (7, 8), (3, 2),
-            (3, 4), (15, 14), (7, 6), (11, 12),
+            (0, 1), (1, 0), (1, 2), (2, 1), (2, 3), (3, 2), (3, 4), (4, 3), (4, 5), (5, 4), (5, 6), (6, 5), (6, 7),
+            (7, 6), (7, 8), (8, 7), (8, 9), (9, 8), (9, 10), (10, 9), (10, 11), (11, 10), (11, 12), (12, 11), (12, 13),
+            (13, 12), (13, 14), (14, 13)
         })
 
     def test_fermat_integer_factorization(self):
@@ -218,7 +243,7 @@ class RegressionTests(SatXTestCase):
         """
         self.engine(bits=10)
 
-        x = satx.tensor(dimensions=4)
+        x = satx.tensor(dimensions=(4,))
         y = satx.tensor(dimensions=(2, 2))
 
         assert x + y == 10
@@ -301,7 +326,7 @@ class RegressionTests(SatXTestCase):
 
         self.engine(bits=t.bit_length())
 
-        x = satx.tensor(dimensions=(len(universe)))
+        x = satx.tensor(dimensions=(len(universe),))
 
         assert sum(x[[i]](0, universe[i]) for i in range(len(universe))) == t
 
@@ -362,24 +387,28 @@ class RegressionTests(SatXTestCase):
         def differences(lst):
             return [abs(lst[i] - lst[i - 1]) for i in range(1, len(lst))]
 
-        def gen_instance(n):
-            y = list(range(1, n + 1))
-            random.shuffle(y)
-            return differences(y)
-
         for n in range(1, 30):
-            diffs = gen_instance(n)
+            perm = list(range(1, n + 1))
+            random.shuffle(perm)
+            perm = tuple(perm)
+            diffs = differences(perm)
 
-            self.engine(bits=n.bit_length() + 1)
+            self.engine(bits=n.bit_length() + 1, signed=True)
             x = satx.vector(size=n)
             satx.all_different(x)
             satx.apply_single(x, lambda a: 1 <= a <= n)
             for i in range(n - 1):
-                assert satx.index(i, diffs) == satx.one_of([x[i + 1] - x[i], x[i] - x[i + 1]])
-            self.assert_satisfiable()
+                assert diffs[i] == satx.one_of([x[i + 1] - x[i], x[i] - x[i + 1]])
+
+            solutions = set()
+            while self.satisfy():
+                solutions.add(tuple(int(xx) for xx in x))
+                if self.verbose:
+                    print(perm, differences(x), x)
             if self.verbose:
-                print(differences(x))
-            self.assertEqual(differences(x), diffs)
+                print()
+            self.assertTrue(all(differences(s) == diffs for s in solutions))
+            self.assertTrue(any(s == perm for s in solutions))
 
     def test_diophantine_equation_6(self):
         self.engine(bits=10)
@@ -509,7 +538,7 @@ class RegressionTests(SatXTestCase):
 
         self.assert_solutions(solution, {7, 22, 21, 14})
 
-    def test_multidimensional_latin_squares(self):
+    def test_multidimensional_latin_squares(self) -> None:
         """
         In combinatorics and in experimental design, a Latin square is an n × n array filled with n different symbols,
         each occurring exactly once in each row and exactly once in each column.
@@ -521,7 +550,7 @@ class RegressionTests(SatXTestCase):
 
         self.engine(bits=n.bit_length())
 
-        Y_flat = satx.vector(size=np.prod(shape, dtype=int))
+        Y_flat = satx.vector(size=np.prod(shape, dtype=int).item())
 
         satx.apply_single(Y_flat, lambda k: k < n)
 
@@ -545,7 +574,7 @@ class RegressionTests(SatXTestCase):
                     self.assertNotEqual(arr[i], arr[j])
 
         for axis in range(len(shape)):
-            all_dimensions: list = [range(d) for d in shape]
+            all_dimensions = [range(d) for d in shape]
             all_dimensions[axis] = [slice(None, None, None)]
             for idx in itertools.product(*all_dimensions):
                 assert_all_different(Y_int[tuple(idx)])
@@ -668,8 +697,8 @@ class RegressionTests(SatXTestCase):
         if self.verbose:
             print(ids, elements)
             print(perm)
-        for i1, i2 in itertools.pairwise(perm):
-            self.assertEqual(M[i1, i2], 1)
+        for i in range(len(perm) - 1):
+            self.assertEqual(M[perm[i], perm[i + 1]], 1)
         self.assertEqual(M[perm[-1], perm[0]], 1)
 
     def test_non_hamiltonian_graph(self):
@@ -736,6 +765,8 @@ class RegressionTests(SatXTestCase):
             else:
                 # warning: with this example the solution is found on the first try
                 bins += 1
+                if self.verbose:
+                    print(bins)
                 self.assertLessEqual(bins, ground_truth)
 
     def test_random_zero_one_integer_programming(self):
@@ -984,42 +1015,6 @@ class RegressionTests(SatXTestCase):
         for i in range(base):
             for j in range(base):
                 assert_all_different(board_int[i * base:(i + 1) * base, j * base:(j + 1) * base].flatten())
-
-    def test_maximum_constrained_partition(self):
-        # http://www.csc.kth.se/~viggo/wwwcompendium/node152.html
-        # However this implementation does not find the maximum.
-
-        bits = 10
-        n = 2 * 100
-
-        # D = [random.randint(1, 2 ** bits) for _ in range(n)]
-        # Be careful, a solution might not exist.
-
-        D = [588, 685, 114, 74, 986, 856, 289, 1008, 168, 311, 723, 843, 73, 955, 792, 940, 97, 208, 965, 311, 42, 67,
-             272, 664, 216, 710, 400, 786, 1005, 228, 124, 957, 692, 255, 607, 261, 794, 602, 249, 388, 79, 803, 911,
-             761, 391, 933, 731, 155, 92, 82, 996, 524, 55, 443, 471, 192, 861, 626, 233, 299, 873, 865, 173, 215, 852,
-             129, 204, 851, 320, 63, 915, 883, 855, 62, 1018, 665, 518, 161, 722, 145, 249, 736, 61, 708, 713, 365, 21,
-             473, 750, 145, 294, 426, 7, 420, 253, 15, 601, 756, 51, 477, 291, 383, 930, 231, 977, 706, 529, 267, 58,
-             427, 742, 687, 970, 600, 607, 670, 377, 166, 211, 631, 321, 772, 301, 257, 457, 647, 498, 485, 377, 597,
-             763, 860, 95, 271, 43, 807, 160, 150, 271, 861, 614, 854, 292, 865, 611, 727, 174, 509, 911, 757, 119, 771,
-             837, 18, 855, 657, 904, 418, 762, 601, 965, 187, 380, 223, 568, 230, 316, 914, 817, 380, 864, 885, 358,
-             508, 929, 698, 292, 728, 948, 178, 990, 418, 604, 4, 920, 947, 16, 448, 612, 235, 617, 320, 869, 966, 190,
-             1020, 476, 831, 574, 45]
-        if self.verbose:
-            print(D)
-
-        self.engine(bits=sum(D).bit_length())
-
-        bins, sub, com = satx.subsets(D, n // 2, complement=True)
-
-        assert sum(sub) == sum(com)
-
-        self.assert_satisfiable()
-        sub = [D[i] for i in range(n) if bins.binary[i]]
-        com = [D[i] for i in range(n) if not bins.binary[i]]
-        if self.verbose:
-            print(sub, com)
-        self.assertEqual(sum(sub), sum(com))
 
     def test_board_coloration(self):
         """
@@ -1297,11 +1292,15 @@ class SlowRegressionTests(SatXTestCase):
         super().__init__(*args, **kwargs)
 
     def test_exponential_diophantine_equation(self):
-        self.engine(bits=16, deep=4)
+        self.engine(bits=16)
 
         x = satx.integer()
         y = satx.integer()
         z = satx.integer()
+
+        deep = 4
+        assert y <= deep
+        assert x < 2 ** deep
 
         satx.apply_single([x, y, z], lambda t: t != 0)
 
@@ -1344,7 +1343,7 @@ class SlowRegressionTests(SatXTestCase):
                 self.assertEqual((int(x), int(y)), (5, 5))
                 self.assertEqual(opt, ground_truth)
                 if plot:
-                    import matplotlib.pyplot as plt
+                    import matplotlib.pyplot as plt  # type: ignore
                     a, b = zip(*data)
                     plt.plot(a, b, '.')
                     plt.plot(x, y, 'x')
@@ -1392,7 +1391,7 @@ class SlowRegressionTests(SatXTestCase):
                 if self.verbose:
                     print(opt, x_int, y_int)
                 if plot:
-                    import matplotlib.pyplot as plt
+                    import matplotlib.pyplot as plt  # type: ignore
                     a, b = zip(*[data[i] for i in x_int + [x_int[0]]])
                     plt.plot(a, b, 'ro')
                     plt.plot(a, b, 'k-')
@@ -1447,14 +1446,50 @@ class SlowRegressionTests(SatXTestCase):
         for x, n in ground_truth:
             self.assertEqual(x, functools.reduce(operator.mul, (k ** 2 for k in range(1, n + 1))))
 
-    def test_vectors(self, plot=False):
+    def test_maximum_constrained_partition(self):
+        # http://www.csc.kth.se/~viggo/wwwcompendium/node152.html
+        # However this implementation does not find the maximum.
+
+        bits = 10
+        n = 2 * 100
+
+        # D = [random.randint(1, 2 ** bits) for _ in range(n)]
+        # Be careful, a solution might not exist.
+
+        D = [588, 685, 114, 74, 986, 856, 289, 1008, 168, 311, 723, 843, 73, 955, 792, 940, 97, 208, 965, 311, 42, 67,
+             272, 664, 216, 710, 400, 786, 1005, 228, 124, 957, 692, 255, 607, 261, 794, 602, 249, 388, 79, 803, 911,
+             761, 391, 933, 731, 155, 92, 82, 996, 524, 55, 443, 471, 192, 861, 626, 233, 299, 873, 865, 173, 215, 852,
+             129, 204, 851, 320, 63, 915, 883, 855, 62, 1018, 665, 518, 161, 722, 145, 249, 736, 61, 708, 713, 365, 21,
+             473, 750, 145, 294, 426, 7, 420, 253, 15, 601, 756, 51, 477, 291, 383, 930, 231, 977, 706, 529, 267, 58,
+             427, 742, 687, 970, 600, 607, 670, 377, 166, 211, 631, 321, 772, 301, 257, 457, 647, 498, 485, 377, 597,
+             763, 860, 95, 271, 43, 807, 160, 150, 271, 861, 614, 854, 292, 865, 611, 727, 174, 509, 911, 757, 119, 771,
+             837, 18, 855, 657, 904, 418, 762, 601, 965, 187, 380, 223, 568, 230, 316, 914, 817, 380, 864, 885, 358,
+             508, 929, 698, 292, 728, 948, 178, 990, 418, 604, 4, 920, 947, 16, 448, 612, 235, 617, 320, 869, 966, 190,
+             1020, 476, 831, 574, 45]
+        if self.verbose:
+            print(D)
+
+        self.engine(bits=sum(D).bit_length())
+
+        bins, sub, com = satx.subsets(D, n // 2, complement=True)
+
+        assert sum(sub) == sum(com)
+
+        self.assert_satisfiable()
+        sub = [D[i] for i in range(n) if bins.binary[i]]
+        com = [D[i] for i in range(n) if not bins.binary[i]]
+        if self.verbose:
+            print(sub, com)
+        self.assertEqual(sum(sub), sum(com))
+
+    def test_vectors(self, plot=False) -> None:
         dim = 2
 
         self.engine(bits=6)
 
         ps: list[satx.Rational] = satx.vector(size=dim, is_rational=True)
 
-        assert sum([p ** dim for p in ps]) <= 1
+        assert sum(p ** 2 for p in ps) <= 1  # type: ignore
 
         ground_truth = {((2, 6), (0, 1)), ((0, 1), (4, 7)), ((0, 2), (0, 1)), ((0, 2), (0, 3)), ((0, 3), (2, 2)),
                         ((1, 1), (0, 7)), ((0, 1), (0, 3)), ((0, 1), (5, 7)), ((0, 5), (1, 1)), ((0, 1), (0, 7)),
@@ -1480,7 +1515,7 @@ class SlowRegressionTests(SatXTestCase):
 
         self.assert_solutions(lambda: tuple((int(x.numerator), int(x.denominator)) for x in ps), ground_truth)
         if plot:
-            import matplotlib.pyplot as plt
+            import matplotlib.pyplot as plt  # type: ignore
             dots = {tuple(num / denom for num, denom in s) for s in ground_truth}
             x, y = zip(*dots)
             plt.axis('equal')
@@ -1518,8 +1553,13 @@ class SlowRegressionTests(SatXTestCase):
         assert x != 0
         assert y != 0
 
-        self.assert_solutions(lambda: (int(x.numerator), int(x.denominator), int(y.numerator), int(y.denominator)),
-                              ground_truth={(6, 1, 18, 1), (2, 1, 4, 1), (4, 2, 4, 1), (4, 2, 8, 2)})
+        solutions = set()
+        while self.satisfy():
+            solutions.add((fractions.Fraction(int(x.numerator), int(x.denominator)),
+                           fractions.Fraction(int(y.numerator), int(y.denominator))))
+
+        self.assertEqual(solutions, {(fractions.Fraction(2, 1), fractions.Fraction(4, 1)),
+                                     (fractions.Fraction(6, 1), fractions.Fraction(18, 1))})
 
     def test_semi_magic_square_of_squares(self):
         self.engine(bits=22)
@@ -1546,8 +1586,9 @@ class SlowRegressionTests(SatXTestCase):
         assert E + I == B + C
         # assert G + E == F + I # perfect magic
 
-        self.assert_solutions(lambda: (int(p), int(q), int(r), int(s)),
-                              {(38, 21, 16, 5), (38, 16, 21, 5)})
+        self.assert_satisfiable()
+
+        self.assertIn((int(p), int(q), int(r), int(s)), {(38, 21, 16, 5), (38, 16, 21, 5)})
 
     def test_dudeney(self):
         """

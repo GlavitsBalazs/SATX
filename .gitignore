@@ -1,0 +1,7 @@
+*.cnf
+*.mod
+
+*.pyc
+build/
+dist/
+SATX.egg-info/

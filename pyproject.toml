@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "SATX"
+description = "SAT-X: The constraint modeling language for SAT solvers"
+authors = [{ name = "Oscar Riveros", email = "oscar.riveros@peqnp.science" } , { name = "Balázs Glávits", email = "balazs@glavits.hu" }]
+urls = { GitHub = "https://github.com/maxtuno/SATX" }
+readme = "README.md"
+license = { file = "LICENSE" }
+
+version = "0.4.0"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.19.3"]
